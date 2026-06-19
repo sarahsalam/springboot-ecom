@@ -8,9 +8,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -31,11 +31,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = null;
         String email = null;
+        String rawRole = null;
 
         // 1. Extract token
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-            email = jwtService.extractEmail(token);
+            try {
+                email = jwtService.extractEmail(token);
+                rawRole = jwtService.extractRole(token);
+            } catch (Exception e) {
+                // ignore parse errors here; token will be treated as invalid below
+            }
         }
 
         // 2. Validate token
@@ -43,14 +49,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             if (jwtService.isTokenValid(token)) {
 
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                email,
-                                null,
-                                Collections.emptyList()
-                        );
+                // Normalize role: remove leading ROLE_ if present and uppercase
+                String normalizedRole = null;
+                if (rawRole != null) {
+                    normalizedRole = rawRole.toUpperCase();
+                    if (normalizedRole.startsWith("ROLE_")) {
+                        normalizedRole = normalizedRole.substring(5);
+                    }
+                }
 
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                if (normalizedRole != null) {
+                    SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + normalizedRole);
+
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    email,
+                                    null,
+                                    Collections.singletonList(authority)
+                            );
+
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
         }
 

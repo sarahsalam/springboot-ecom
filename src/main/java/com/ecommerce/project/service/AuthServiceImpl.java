@@ -49,7 +49,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // GENERATE TOKEN
-        String token = jwtService.generateToken(user.getEmail());
+        String token = jwtService.generateToken(user.getEmail(), user.getRole());
 
         return token;
     }
